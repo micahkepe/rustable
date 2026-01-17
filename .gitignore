@@ -1,0 +1,4 @@
+/target
+
+# CSV files for testing
+*.csv
