@@ -1,3 +1,4 @@
+#![doc = include_str!("../README.md")]
 use clap::{CommandFactory, Parser};
 use csv::Reader;
 use std::{
