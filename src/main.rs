@@ -1,5 +1,5 @@
 #![doc = include_str!("../README.md")]
-use clap::{CommandFactory, Parser};
+use clap::{CommandFactory, Parser, ValueEnum};
 use csv::Reader;
 use std::{
     fs::File,
@@ -14,6 +14,17 @@ use unicode_width::UnicodeWidthStr;
 struct Args {
     /// The input file path contents to tablify. If omitted, attempts to read from `stdin`.
     input: Option<PathBuf>,
+    /// Alignment of the elements in the table.
+    #[arg(short, long)]
+    align: Option<ColumnAlign>,
+}
+
+#[derive(Debug, Default, Clone, Copy, ValueEnum)]
+enum ColumnAlign {
+    #[default]
+    Center,
+    Left,
+    Right,
 }
 
 /**
@@ -59,10 +70,19 @@ fn main() -> anyhow::Result<()> {
         + max_single_col_display_width.len() // '|' separator for each
         + 1;
 
+    let align_fn = match args.align {
+        Some(align) => match align {
+            ColumnAlign::Center => pad_center,
+            ColumnAlign::Left => pad_right,
+            ColumnAlign::Right => pad_left,
+        },
+        None => pad_center,
+    };
+
     if let Ok(headers) = reader.headers() {
         print!("| ");
         for (i, header) in headers.iter().enumerate() {
-            print!("{}", pad_center(header, max_single_col_display_width[i]));
+            print!("{}", align_fn(header, max_single_col_display_width[i]));
             if i != max_single_col_display_width.len() - 1 {
                 print!(" | ")
             }
@@ -74,7 +94,7 @@ fn main() -> anyhow::Result<()> {
     for record in &records {
         print!("| ");
         for (i, elem) in record.iter().enumerate() {
-            print!("{}", pad_center(elem, max_single_col_display_width[i]));
+            print!("{}", align_fn(elem, max_single_col_display_width[i]));
             if i != max_single_col_display_width.len() - 1 {
                 print!(" | ")
             }
@@ -93,6 +113,22 @@ fn pad_center(elem: &str, width: usize) -> String {
     let len = elem.width_cjk();
     let total_pad = width.saturating_sub(len);
     let left_pad = total_pad / 2;
-    let right_pad = total_pad - left_pad;
+    let right_pad = total_pad.saturating_sub(left_pad);
+    format!("{}{}{}", " ".repeat(left_pad), elem, " ".repeat(right_pad))
+}
+
+fn pad_left(elem: &str, width: usize) -> String {
+    let len = elem.width_cjk();
+    let total_pad = width.saturating_sub(len);
+    let left_pad = total_pad;
+    let right_pad = 0;
+    format!("{}{}{}", " ".repeat(left_pad), elem, " ".repeat(right_pad))
+}
+
+fn pad_right(elem: &str, width: usize) -> String {
+    let len = elem.width_cjk();
+    let total_pad = width.saturating_sub(len);
+    let left_pad = 0;
+    let right_pad = total_pad;
     format!("{}{}{}", " ".repeat(left_pad), elem, " ".repeat(right_pad))
 }
