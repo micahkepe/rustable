@@ -6,6 +6,7 @@ use std::{
     io::{self, BufRead, BufReader, IsTerminal},
     path::PathBuf,
 };
+use unicode_width::UnicodeWidthStr;
 
 /// Tablify semi-structured content into pretty-printed Markdown tables.
 #[derive(Parser, Debug)]
@@ -38,29 +39,31 @@ fn main() -> anyhow::Result<()> {
     };
 
     // First pass to collect info for pretty-printing
-    let mut max_single_col_bytes: Vec<usize> = vec![];
+    let mut max_single_col_display_width: Vec<usize> = vec![];
     if let Ok(headers) = reader.headers() {
         for col in headers.iter() {
-            max_single_col_bytes.push(col.to_owned().len())
+            max_single_col_display_width.push(col.width_cjk())
         }
     }
     let records: Vec<csv::StringRecord> = reader.records().collect::<Result<_, _>>()?;
     for record in &records {
         for (i, elem) in record.iter().enumerate() {
-            max_single_col_bytes[i] = max_single_col_bytes[i].max(elem.to_owned().len())
+            max_single_col_display_width[i] = max_single_col_display_width[i].max(elem.width_cjk())
         }
     }
 
     // Second pass to pretty-print
-    let col_maxes_total: usize = max_single_col_bytes.iter().sum();
-    let horiztonal_bar_width =
-        col_maxes_total + 2 * max_single_col_bytes.len() + max_single_col_bytes.len() + 1;
+    let col_maxes_total: usize = max_single_col_display_width.iter().sum();
+    let horiztonal_bar_width = col_maxes_total
+        + 2 * max_single_col_display_width.len() // space on left/right
+        + max_single_col_display_width.len() // '|' separator for each
+        + 1;
 
     if let Ok(headers) = reader.headers() {
         print!("| ");
         for (i, header) in headers.iter().enumerate() {
-            print!("{}", pad_center(header, max_single_col_bytes[i]));
-            if i != max_single_col_bytes.len() - 1 {
+            print!("{}", pad_center(header, max_single_col_display_width[i]));
+            if i != max_single_col_display_width.len() - 1 {
                 print!(" | ")
             }
         }
@@ -71,8 +74,8 @@ fn main() -> anyhow::Result<()> {
     for record in &records {
         print!("| ");
         for (i, elem) in record.iter().enumerate() {
-            print!("{}", pad_center(elem, max_single_col_bytes[i]));
-            if i != max_single_col_bytes.len() - 1 {
+            print!("{}", pad_center(elem, max_single_col_display_width[i]));
+            if i != max_single_col_display_width.len() - 1 {
                 print!(" | ")
             }
         }
@@ -87,7 +90,7 @@ fn draw_horizontal_bar(width: usize) {
 }
 
 fn pad_center(elem: &str, width: usize) -> String {
-    let len = elem.len();
+    let len = elem.width_cjk();
     let total_pad = width - len;
     let left_pad = total_pad / 2;
     let right_pad = total_pad - left_pad;
