@@ -91,7 +91,7 @@ fn draw_horizontal_bar(width: usize) {
 
 fn pad_center(elem: &str, width: usize) -> String {
     let len = elem.width_cjk();
-    let total_pad = width - len;
+    let total_pad = width.saturating_sub(len);
     let left_pad = total_pad / 2;
     let right_pad = total_pad - left_pad;
     format!("{}{}{}", " ".repeat(left_pad), elem, " ".repeat(right_pad))
