@@ -1,22 +1,36 @@
 use clap::{CommandFactory, Parser};
-use csv::Reader;
 use std::{
     fs::File,
-    io::{self, BufRead, BufReader, IsTerminal},
+    io::{self, BufReader, IsTerminal},
+    path::PathBuf,
 };
 
-use rustable::{Args, format_table};
+use rustable::{ColumnAlign, format_table};
+
+/// Tablify semi-structured content into pretty-printed Markdown tables.
+#[derive(Parser, Debug)]
+#[command(name = "rustable", version, about, long_about = None)]
+struct Args {
+    /// The input file path contents to tablify. If omitted, attempts to read from `stdin`.
+    input: Option<PathBuf>,
+
+    /// Alignment of the elements in the table.
+    #[arg(short, long)]
+    align: Option<ColumnAlign>,
+}
 
 /**
  * It's tabling time.
  */
 fn main() -> anyhow::Result<()> {
     let args = Args::parse();
+    let align = args.align.unwrap_or_default();
 
-    let mut reader: Reader<Box<dyn BufRead>> = match args.input {
+    let output = match args.input {
         Some(path) => {
             let file = File::open(&path)?;
-            Reader::from_reader(Box::new(BufReader::new(file)))
+            let mut reader = BufReader::new(file);
+            format_table(&mut reader, align)?
         }
         None => {
             // check if terminal
@@ -25,12 +39,11 @@ fn main() -> anyhow::Result<()> {
                 let mut cmd = Args::command();
                 return Ok(cmd.print_help()?);
             }
-            Reader::from_reader(Box::new(io::stdin().lock()))
+            format_table(&mut io::stdin().lock(), align)?
         }
     };
 
-    let align = args.align.unwrap_or_default();
-    println!("{}", format_table(&mut reader, align)?);
+    print!("{}", output);
 
     Ok(())
 }

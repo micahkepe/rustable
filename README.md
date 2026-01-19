@@ -8,12 +8,13 @@ tables.
 ```text
 Tablify semi-structured content into pretty-printed Markdown tables
 
-Usage: rustable [INPUT]
+Usage: rustable [OPTIONS] [INPUT]
 
 Arguments:
   [INPUT]  The input file path contents to tablify. If omitted, attempts to read from `stdin`
 
 Options:
-  -h, --help     Print help
-  -V, --version  Print version
+  -a, --align <ALIGN>  Alignment of the elements in the table [possible values: center, left, right]
+  -h, --help           Print help (see more with '--help')
+  -V, --version        Print version
 ```
