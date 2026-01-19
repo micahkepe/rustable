@@ -1,0 +1,7 @@
+[target.'cfg(all())']
+rustflags = [
+  "-Dclippy::correctness",
+  "-Dclippy::suspicious",
+  "-Dclippy::perf",
+  "-Dclippy::style",
+]
