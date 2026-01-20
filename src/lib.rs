@@ -1,6 +1,7 @@
 #![doc = include_str!("../README.md")]
 use clap::ValueEnum;
-use std::io::{self, Write};
+use std::io;
+use termcolor::{Color, ColorSpec};
 use unicode_width::UnicodeWidthStr;
 
 /// The formatting alignment to use for column elements.
@@ -15,13 +16,40 @@ pub enum ColumnAlign {
     Right,
 }
 
+/// Available options for controlling whether to use color in the output.
+#[derive(Debug, Default, Clone, Copy, ValueEnum)]
+pub enum ColorOpt {
+    /// Use color if the output is a terminal.
+    #[default]
+    Auto,
+    /// Always use color.
+    Always,
+    /// Never use color.
+    Never,
+}
+
+impl From<ColorOpt> for termcolor::ColorChoice {
+    fn from(value: ColorOpt) -> Self {
+        match value {
+            ColorOpt::Auto => termcolor::ColorChoice::Auto,
+            ColorOpt::Always => termcolor::ColorChoice::Always,
+            ColorOpt::Never => termcolor::ColorChoice::Never,
+        }
+    }
+}
+
 /// Format a CSV table into a pretty-printed Markdown table.
 ///
 /// TODO: make input generic over tabular data source
-pub fn format_table<R: io::Read>(
+pub fn format_table<R, W>(
     reader: &mut R,
+    out: &mut W,
     align: ColumnAlign,
-) -> anyhow::Result<String> {
+) -> anyhow::Result<()>
+where
+    R: io::Read,
+    W: termcolor::WriteColor,
+{
     let mut csv_reader = csv::Reader::from_reader(reader);
 
     // First pass to collect info for pretty-printing
@@ -41,7 +69,6 @@ pub fn format_table<R: io::Read>(
     }
 
     // Second pass to pretty-print
-    let mut out = Vec::new();
     let col_maxes_total: usize = max_single_col_display_width.iter().sum();
     let horiztonal_bar_width = col_maxes_total
         + 2 * max_single_col_display_width.len() // space on left/right
@@ -55,46 +82,66 @@ pub fn format_table<R: io::Read>(
     };
 
     if let Ok(headers) = csv_reader.headers() {
-        write!(&mut out, "| ")?;
+        write!(out, "| ")?;
         for (i, header) in headers.iter().enumerate() {
-            write!(
-                &mut out,
-                "{}",
-                align_fn(header, max_single_col_display_width[i])
+            let mut header_spec = ColorSpec::new();
+            header_spec.set_fg(Some(Color::Cyan)).set_bold(true);
+            write_colored(
+                out,
+                &header_spec,
+                &align_fn(header, max_single_col_display_width[i]),
             )?;
             if i != max_single_col_display_width.len() - 1 {
-                write!(&mut out, " | ")?
+                write!(out, " | ")?
             }
         }
-        writeln!(&mut out, " |")?;
-        write_md_horizontal_bar(&mut out, horiztonal_bar_width)?;
+        writeln!(out, " |")?;
+        write_md_horizontal_bar(out, horiztonal_bar_width)?;
     }
 
     for record in &records {
-        write!(&mut out, "| ")?;
+        write!(out, "| ")?;
         for (i, elem) in record.iter().enumerate() {
             write!(
-                &mut out,
+                out,
                 "{}",
                 align_fn(elem, max_single_col_display_width[i])
             )?;
             if i != max_single_col_display_width.len() - 1 {
-                write!(&mut out, " | ")?
+                write!(out, " | ")?
             }
         }
-        writeln!(&mut out, " |")?;
+        writeln!(out, " |")?;
     }
 
-    let s = String::from_utf8(out)?;
-    Ok(s)
+    Ok(())
+}
+
+/// Helper to write colored text to a `WriteColor` instance.
+///
+/// Args:
+/// * `out`: the `WriteColor` instance to write to.
+/// * `spec`: the `ColorSpec` to use for the text.
+/// * `text`: the text to write.
+///
+/// This replaces manually writing `out.set_color(spec)?; write!(out, "{text}")?; out.reset()?;`
+fn write_colored<W: termcolor::WriteColor>(
+    out: &mut W,
+    spec: &termcolor::ColorSpec,
+    text: &str,
+) -> std::io::Result<()> {
+    out.set_color(spec)?;
+    write!(out, "{text}")?;
+    out.reset()?;
+    Ok(())
 }
 
 /// Write a horizontal bar in Markdown with the given width with newline to the given buffer.
-fn write_md_horizontal_bar<W: std::io::Write>(
-    mut buffer: W,
+fn write_md_horizontal_bar<W: termcolor::WriteColor>(
+    out: &mut W,
     width: usize,
 ) -> std::io::Result<()> {
-    writeln!(&mut buffer, "|{}|", "-".repeat(width - 2))?;
+    writeln!(out, "|{}|", "-".repeat(width - 2))?;
     Ok(())
 }
 
@@ -128,6 +175,7 @@ fn pad_right(elem: &str, width: usize) -> String {
 #[cfg(test)]
 mod tests {
     use std::io::Cursor;
+    use termcolor::NoColor;
 
     use super::*;
 
@@ -138,7 +186,9 @@ Username,Identifier,First name,Last name
 booker12,9012,Rachel,Booker
 grey07,2070,Laura,Grey";
         let mut reader = Cursor::new(input);
-        let actual = format_table(&mut reader, ColumnAlign::Center).unwrap();
+        let mut out = NoColor::new(Vec::new());
+        format_table(&mut reader, &mut out, ColumnAlign::Center).unwrap();
+        let actual = String::from_utf8(out.into_inner()).unwrap();
         let expected = "\
 | Username | Identifier | First name | Last name |
 |------------------------------------------------|

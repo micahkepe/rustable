@@ -1,11 +1,12 @@
-use clap::{CommandFactory, Parser};
+use clap::{ArgAction, CommandFactory, Parser};
 use std::{
     fs::File,
     io::{self, BufReader, IsTerminal},
     path::PathBuf,
 };
+use termcolor::{ColorChoice, StandardStream};
 
-use rustable::{ColumnAlign, format_table};
+use rustable::{ColorOpt, ColumnAlign, format_table};
 
 /// Tablify semi-structured content into pretty-printed Markdown tables.
 #[derive(Parser, Debug)]
@@ -17,6 +18,14 @@ struct Args {
     /// Alignment of the elements in the table.
     #[arg(short, long)]
     align: Option<ColumnAlign>,
+
+    /// Color option for the output.
+    #[arg(short, long, default_value = "auto")]
+    color: ColorOpt,
+
+    /// Alias for `--color never`
+    #[arg(long, action = ArgAction::SetTrue)]
+    no_color: bool,
 }
 
 /**
@@ -25,12 +34,23 @@ struct Args {
 fn main() -> anyhow::Result<()> {
     let args = Args::parse();
     let align = args.align.unwrap_or_default();
+    let mut color_choice: ColorChoice = args.color.into();
+    if args.no_color {
+        color_choice = ColorChoice::Never;
+    }
 
-    let output = match args.input {
+    // Terminal auto-detection
+    // See: <https://docs.rs/termcolor/1.4.1/termcolor/index.html#detecting-presence-of-a-terminal>
+    if color_choice == ColorChoice::Auto && !io::stdout().is_terminal() {
+        color_choice = ColorChoice::Never;
+    }
+    let mut stdout = StandardStream::stdout(color_choice);
+
+    match args.input {
         Some(path) => {
             let file = File::open(&path)?;
             let mut reader = BufReader::new(file);
-            format_table(&mut reader, align)?
+            format_table(&mut reader, &mut stdout, align)?
         }
         None => {
             // check if terminal
@@ -39,11 +59,9 @@ fn main() -> anyhow::Result<()> {
                 let mut cmd = Args::command();
                 return Ok(cmd.print_help()?);
             }
-            format_table(&mut io::stdin().lock(), align)?
+            format_table(&mut io::stdin().lock(), &mut stdout, align)?
         }
     };
-
-    print!("{}", output);
 
     Ok(())
 }
