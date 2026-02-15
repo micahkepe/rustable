@@ -34,10 +34,8 @@ struct Args {
 fn main() -> anyhow::Result<()> {
     let args = Args::parse();
     let align = args.align.unwrap_or_default();
-    let mut color_choice: ColorChoice = args.color.into();
-    if args.no_color {
-        color_choice = ColorChoice::Never;
-    }
+    let mut color_choice =
+        if args.no_color { ColorChoice::Never } else { args.color.into() };
 
     // Terminal auto-detection
     // See: <https://docs.rs/termcolor/1.4.1/termcolor/index.html#detecting-presence-of-a-terminal>
@@ -46,22 +44,19 @@ fn main() -> anyhow::Result<()> {
     }
     let mut stdout = StandardStream::stdout(color_choice);
 
-    match args.input {
-        Some(path) => {
-            let file = File::open(&path)?;
-            let mut reader = BufReader::new(file);
-            format_table(&mut reader, &mut stdout, align)?
+    if let Some(path) = args.input {
+        let file = File::open(&path)?;
+        let mut reader = BufReader::new(file);
+        format_table(&mut reader, &mut stdout, align)?;
+    } else {
+        // check if terminal
+        if io::stdin().is_terminal() {
+            // no piped input or file specified
+            let mut cmd = Args::command();
+            return Ok(cmd.print_help()?);
         }
-        None => {
-            // check if terminal
-            if io::stdin().is_terminal() {
-                // no piped input or file specified
-                let mut cmd = Args::command();
-                return Ok(cmd.print_help()?);
-            }
-            format_table(&mut io::stdin().lock(), &mut stdout, align)?
-        }
-    };
+        format_table(&mut io::stdin().lock(), &mut stdout, align)?;
+    }
 
     Ok(())
 }

@@ -31,9 +31,9 @@ pub enum ColorOpt {
 impl From<ColorOpt> for termcolor::ColorChoice {
     fn from(value: ColorOpt) -> Self {
         match value {
-            ColorOpt::Auto => termcolor::ColorChoice::Auto,
-            ColorOpt::Always => termcolor::ColorChoice::Always,
-            ColorOpt::Never => termcolor::ColorChoice::Never,
+            ColorOpt::Auto => Self::Auto,
+            ColorOpt::Always => Self::Always,
+            ColorOpt::Never => Self::Never,
         }
     }
 }
@@ -41,6 +41,10 @@ impl From<ColorOpt> for termcolor::ColorChoice {
 /// Format a CSV table into a pretty-printed Markdown table.
 ///
 /// TODO: make input generic over tabular data source
+///
+/// # Errors
+///
+/// Errors from the underlying CSV reader are propagated.
 pub fn format_table<R, W>(
     reader: &mut R,
     out: &mut W,
@@ -55,8 +59,8 @@ where
     // First pass to collect info for pretty-printing
     let mut max_single_col_display_width: Vec<usize> = vec![];
     if let Ok(headers) = csv_reader.headers() {
-        for col in headers.iter() {
-            max_single_col_display_width.push(col.width_cjk())
+        for col in headers {
+            max_single_col_display_width.push(col.width_cjk());
         }
     }
     let records: Vec<csv::StringRecord> =
@@ -64,7 +68,7 @@ where
     for record in &records {
         for (i, elem) in record.iter().enumerate() {
             max_single_col_display_width[i] =
-                max_single_col_display_width[i].max(elem.width_cjk())
+                max_single_col_display_width[i].max(elem.width_cjk());
         }
     }
 
@@ -92,7 +96,7 @@ where
                 &align_fn(header, max_single_col_display_width[i]),
             )?;
             if i != max_single_col_display_width.len() - 1 {
-                write!(out, " | ")?
+                write!(out, " | ")?;
             }
         }
         writeln!(out, " |")?;
@@ -108,7 +112,7 @@ where
                 align_fn(elem, max_single_col_display_width[i])
             )?;
             if i != max_single_col_display_width.len() - 1 {
-                write!(out, " | ")?
+                write!(out, " | ")?;
             }
         }
         writeln!(out, " |")?;
